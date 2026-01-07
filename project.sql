@@ -217,6 +217,34 @@ CREATE TABLE IF NOT EXISTS system_logging(
 	log_table_name VARCHAR(50) NOT NULL
 );
 
+ALTER TABLE trip 
+ADD COLUMN tr_driver_AT CHAR(10),
+ADD COLUMN tr_vehicle_license VARCHAR(20),
+ADD CONSTRAINT fk_trip_driver FOREIGN KEY (tr_driver_AT) REFERENCES worker(wrk_AT),
+ADD CONSTRAINT fk_trip_vehicle FOREIGN KEY (tr_vehicle_license) REFERENCES vehicles(ve_license_plate);
+
+-- 3.1.3.1 & ΓΕΝΙΚΑ 
+ALTER TABLE trip_accommodation 
+ADD COLUMN sa_rooms INT DEFAULT 1;
+
+ALTER TABLE trip DROP FOREIGN KEY fk_trip_vehicle;
+
+ALTER TABLE trip DROP INDEX fk_trip_vehicle;
+
+-- ΧΡΕΙΑΣΤΗΚΕ ΓΙΑ 3.1.3.1
+ALTER TABLE trip 
+ADD COLUMN tr_ve_id INT DEFAULT NULL, 
+ADD CONSTRAINT fk_trip_vehicle 
+FOREIGN KEY (tr_ve_id) REFERENCES vehicles(ve_id) 
+ON UPDATE CASCADE ON DELETE SET NULL;
+
+-- ΧΡΕΙΑΣΤΗΚΕ ΓΙΑ 3.1.3.3
+ALTER TABLE trip ADD COLUMN tr_participants INT DEFAULT 0;
+
+-- 3.1.3.4
+
+ALTER TABLE trip 
+ADD COLUMN tr_return_km INT DEFAULT 0;
 
 
 
