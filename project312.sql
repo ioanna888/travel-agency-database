@@ -270,9 +270,9 @@ BEGIN
             rand_total_revenue
             );
             
-            SET i = i +1;
-		END WHILE;
-	END $$
+		SET i = i +1;
+	END WHILE;
+END $$
     
     DELIMITER ;
     
@@ -281,8 +281,117 @@ BEGIN
 -- SELECT * FROM trip_history LIMIT 1000;	
 -- SELECT count(*) FROM trip_history;
 
+-- 3.1.3.2 stored 
+DELIMITER $$
 
+DROP PROCEDURE IF EXISTS FindingAvailableAccommodation$$
 
+CREATE PROCEDURE FindingAvailableAccommodation(
+	IN p_destination_id INT,
+    IN p_check_in DATE,
+    IN p_check_out DATE,
+    IN p_rooms_needed INT,
+    OUT p_first_accommodation_id INT
+)
+
+BEGIN
+	SET p_first_accommodation_id = NULL;
+    
+    -- για να βρόυμε το id του πρώτου καταλύματος χρησιμοποιούμε τη στήλη sa_rooms για να υπολογίσουμε πόσα έχουν κρατηθεί ήδη
+    
+    SELECT a.acc_id INTO p_first_accommodation_id
+    FROM accommodation a
+    LEFT JOIN trip_accommodation ta ON a.acc_id = ta.acc_id 
+	AND (ta.check_in < p_date_out AND ta.check_out > p_check_in)
+    
+    LEFT JOIN trip t ON ta.trip_id = t.tr_id 
+    WHERE a.acc_dst_id = p_destination_id
+		AND a.acc_status = "ACTIVE"
+        
+        -- δεν λαμβάνω. υπόψη τα ακυρωμένα ταξίδια, τα δωμάτια είναι διαθέσιμα
+        AND (t.tr_status != "CANCELLED" OR t.tr_status IS NULL)
+	GROUP BY a.acc_id
+    
+    -- διαθέσιμα δωμάτια = συνολο δωματιών - άθροισμα sa_rooms από ενεργές κρατήσεις
+	HAVING (a.acc_total_rooms - IFNULL(SUM(ta.sa_rooms), 0)) >= p_rooms_needed
+    ORDER BY a.acc_price_per_room ASC, a.acc_stars DESC, a.acc_rating DESC
+    LIMIT 1;
+    
+    -- εμφάνιση 
+    SELECT
+		a.acc_name AS "COMPANY NAME",
+        a.acc_type AS "TYPE",
+        CONCAT(a.acc_street, '', a.acc_street_number, ',', a.acc_city) AS "ADDRESS",
+        a.acc_phone AS "PHONE NUMBER",
+        a.acc_stars AS "STARS",
+        a.acc_rating AS "RATING",
+        a.acc_price_per_room AS "PRICE/ROOM",
+        a.acc_facilities AS "FACILITIES",
+        
+        (a.acc_total_rooms - IFNULL(SUM(ta.sa_rooms), 0)) AS free_rooms
+        
+	FROM accommodation a
+    LEFT JOIN trip_accommodation ta ON a.acc_id = ta.acc_id 
+		AND (ta.check_in < p_date_out AND ta.check_out > p_check_in)
+    
+    LEFT JOIN trip t ON ta.trip_id = t.tr_id WHERE a.acc_dst_id = p_destination_id
+		AND a.acc_status = "ACTIVE"
+        
+        -- δεν λαμβάνω. υπόψη τα ακυρωμένα ταξίδια, τα δωμάτια είναι διαθέσιμα
+        AND (t.tr_status != "CANCELLED" OR t.tr_status IS NULL)
+	GROUP BY a.acc_id
+    
+    HAVING free_rooms >= p_rooms_needed
+    ORDER BY a.acc_price_per_room ASC, a.acc_stars DESC, a.acc_rating DESC;
+    
+END$$
+DELIMITER ;
+
+-- 3.1.3.4
+DELIMITER $$
+
+-- a
+DROP PROCEDURE IF EXISTS GetRevenueByDate$$
+CREATE PROCEDURE GetRevenueByDate(
+	IN p_date_start DATETIME,
+    IN p_date_end DATETIME
+)
+
+BEGIN
+	SELECT SUM(tr_total_revenue) AS 'Total Revenue'
+    FROM trip_history
+    WHERE tr_departure between p_date_start AND p_date_end;
+END$$
+
+-- b
+DROP PROCEDURE IF EXISTS ByDestinationCount$$
+CREATE PROCEDURE ByDestinationCount(
+	IN p_destination_count INT
+)
+BEGIN
+	SELECT tr_departure, tr_return
+    FROM trip_history
+	WHERE tr_destination_count = p_destination_count;
+END$$
+
+DELIMITER ;
+
+-- indexes 
+
+-- a
+CREATE INDEX idx_tr_departure
+USING BTREE
+ON trip_history (tr_departure);
+
+-- b
+CREATE INDEX idx_tr_destination_count
+USING BTREE
+ON trip_history (tr_destination_count);
+
+ANALYZE TABLE trip_history;
+
+CALL GetRevenueByDate('2025-01-01', '2025-06-01');
+CALL ByDestinationCount(3);
 
 
 
