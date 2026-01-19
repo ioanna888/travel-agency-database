@@ -5,6 +5,9 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.sql.*;
+import java.util.HashMap;    
+import java.util.Map; 
+
 
 public class DriverFrame extends JFrame {
     
@@ -42,6 +45,36 @@ public class DriverFrame extends JFrame {
         
         loadData();
     }
+    
+    // Προσθέτουμε στο DriverFrame class
+private Map<String, String> getAvailableWorkers() {
+    Map<String, String> workers = new HashMap<>();
+    String sql = "SELECT wrk_AT, wrk_name, wrk_lname " +
+                 "FROM worker " +
+                 "WHERE wrk_AT NOT IN (SELECT drv_AT FROM driver) " +
+                 "ORDER BY wrk_AT";
+    
+    try (Connection conn = DBConnection.connect();
+         Statement stmt = conn.createStatement();
+         ResultSet rs = stmt.executeQuery(sql)) {
+        
+        while(rs.next()) {
+            String at = rs.getString("wrk_AT");
+            String name = rs.getString("wrk_name");
+            String lname = rs.getString("wrk_lname");
+            
+            String display = at + " - " + name + " " + lname;
+            
+            workers.put(display, at);
+        }
+        
+    } catch (SQLException e) {
+        JOptionPane.showMessageDialog(this, "Error loading workers: " + e.getMessage());
+    }
+    
+    return workers;
+}
+
         
     private void loadData() {
         model.setRowCount(0);
@@ -69,9 +102,35 @@ public class DriverFrame extends JFrame {
     
     
     private void addDriver() {
-        String drv_at = JOptionPane.showInputDialog(this, "Worker AT (Must exist in Worker table):");
-        if (drv_at == null || drv_at.trim().isEmpty()) return;
-        
+        // 1. Παίρνουμε τους διαθέσιμους workers
+        Map<String, String> workers = getAvailableWorkers();
+
+        // 2. Έλεγχος αν υπάρχουν διαθέσιμοι workers
+        if (workers.isEmpty()) {
+            JOptionPane.showMessageDialog(this, 
+            "No available workers! All workers are already drivers or no workers exist.");
+            return;
+            }
+
+        // 3. Μετατροπή σε array για dropdown
+        String[] workerOptions = workers.keySet().toArray(new String[0]);
+
+            // 4. Εμφάνιση dropdown
+            String selectedWorker = (String) JOptionPane.showInputDialog(
+                this,
+                "Select Worker:",
+                "Worker Selection",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                workerOptions,
+                workerOptions[0]
+            );
+
+            // 5. Έλεγχος αν πάτησε Cancel
+            if (selectedWorker == null) return;
+
+        // 6. Παίρνουμε το πραγματικό AT
+        String drv_at = workers.get(selectedWorker);
         String[] licenses = {"A", "B", "C", "D"};
         String license = (String) JOptionPane.showInputDialog(this, 
                 "Select License Type:", "License", 

@@ -5,6 +5,9 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.sql.*;
+import java.util.HashMap;    
+import java.util.Map;        
+
 
 public class VehicleFrame extends JFrame {
     //variables we will use for the class
@@ -21,8 +24,7 @@ public class VehicleFrame extends JFrame {
         setLayout(new BorderLayout());
         
         //details of the table
-        String[] columns = { "ID", "Brand", "Model", "License Plate", "Type", "Seats", "Status", "Kilometres"};
-        
+        String[] columns = { "ID", "Brand", "Model", "License Plate", "Type", "Seats", "Status", "Kilometres", "Branch"};        
         model = new DefaultTableModel(columns,0);
         table = new JTable(model);
         add(new JScrollPane(table), BorderLayout.CENTER);
@@ -54,8 +56,7 @@ public class VehicleFrame extends JFrame {
         private void loadData() {
             
             model.setRowCount(0);
-            String sql = "SELECT * FROM vehicles";
-            
+            String sql = "SELECT v.*, b.br_city FROM vehicles v LEFT JOIN branch b ON v.ve_br_code = b.br_code";            
             try (Connection conn = DBConnection.connect();
                     Statement stmt = conn.createStatement();
                     ResultSet rs = stmt.executeQuery(sql))
@@ -70,9 +71,8 @@ public class VehicleFrame extends JFrame {
                     int seats = rs.getInt("ve_seats");
                     String status = rs.getString("ve_status");
                     int km = rs.getInt("ve_km");
-                    
-                    
-                    model.addRow(new Object[]{id, brand, modelStr, plate, type, seats, status, km});
+                    String branchCity = rs.getString("br_city");
+                    model.addRow(new Object[]{id, brand, modelStr, plate, type, seats, status, km, branchCity});
                 
                 }
             } catch (SQLException e) {
@@ -86,13 +86,44 @@ public class VehicleFrame extends JFrame {
             String brand = JOptionPane.showInputDialog(this,"Brand:");
             String modelStr = JOptionPane.showInputDialog(this, "Model:");
             String license_plate = JOptionPane.showInputDialog(this, "License Plate:");
-        
-            String type = JOptionPane.showInputDialog(this, "Type (Car, Bus, Van):");
             String seatsStr = JOptionPane.showInputDialog(this, "Seats:");
             
-            String brCodeStr = JOptionPane.showInputDialog(this, "Branch Code ID:");
+            //κώδικας για type
+            String[] types = {"Bus", "MiniBus", "Van", "Car"};
+            String type = (String) JOptionPane.showInputDialog(
+                this,
+                "Select Vehicle Type:",
+                "Vehicle Type",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                types,  
+                types[0]  
+              );
             
+            //κωδικασ για branches
+            Map<String, Integer> branches = getBranches();
+            if (branches.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "No branches available!");
+                return;
+                }
+            //μετατροπή σε array  για dropdown
+            String[] branchOptions = branches.keySet().toArray(new String[0]);
+
+            //4. Εμφάνιση dropdown
+                String selectedBranch = (String) JOptionPane.showInputDialog(
+                    this,
+                    "Select Branch:",
+                    "Branch Selection",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    branchOptions,
+                    branchOptions[0]
+                );
+
+            int branchCode = branches.get(selectedBranch);
             
+
+                    
             // default 
             String status = "Available"; 
             int km = 0;
@@ -111,7 +142,6 @@ public class VehicleFrame extends JFrame {
             pstmt.setString(1, brand);
             pstmt.setString(2, modelStr);
             pstmt.setString(3, license_plate);
-            pstmt.setString(4, type);
             
             // 4. ve_seats
             try {
@@ -128,12 +158,10 @@ public class VehicleFrame extends JFrame {
             
             // 7. ve_status
             pstmt.setString(7, status);
-            try {
-                pstmt.setInt(8, Integer.parseInt(brCodeStr));
-            } catch (NumberFormatException ex) {
-                JOptionPane.showMessageDialog(this, "Invalid Branch Code! Must be a number.");
-                return; // Σταματάμε εδώ αν έδωσε λάθος κωδικό
-            }
+            
+            // 8.status
+            pstmt.setInt(8, branchCode);  
+            
             
             
             int rowsAffected = pstmt.executeUpdate();
@@ -148,6 +176,31 @@ public class VehicleFrame extends JFrame {
         }
     }
         
+        // getBtanches() method for drop down menu
+        private Map<String, Integer> getBranches() {
+                Map<String, Integer> branches = new HashMap<>();
+                String sql = "SELECT br_code, br_city, br_street FROM branch ORDER BY br_code";
+                
+                try (Connection conn = DBConnection.connect();
+                Statement stmt = conn.createStatement();
+                ResultSet rs = stmt.executeQuery(sql)) {
+                    while(rs.next()) {
+                        int code = rs.getInt("br_code");
+                        String city = rs.getString("br_city");
+                        String street = rs.getString("br_street");
+                        String display = code + " - " + city + " (" + street + ")";
+                        branches.put(display, code);
+                        
+                    }
+                    
+                } catch (SQLException e) {
+                    JOptionPane.showMessageDialog(this, "Error loading branches: " + e.getMessage());
+                }
+        
+        return branches;
+        
+        }
+
         
     //delete method
         private void deleteVehicle() {
@@ -196,6 +249,8 @@ public class VehicleFrame extends JFrame {
             int currentSeats = (int) model.getValueAt(selectedRow, 5);
             String currentStatus = (String) model.getValueAt(selectedRow, 6);
             int currentKm = (int) model.getValueAt(selectedRow, 7);
+            String currentBranchCity = (String) model.getValueAt(selectedRow, 8);
+            
             
         String newBrand = (String) JOptionPane.showInputDialog(this, "Edit Brand:", "Edit Vehicle", JOptionPane.PLAIN_MESSAGE, null, null, currentBrand);
         if (newBrand == null) return; // Αν πατήσει Cancel, σταματάμε
@@ -206,20 +261,58 @@ public class VehicleFrame extends JFrame {
         String newPlate = (String) JOptionPane.showInputDialog(this, "Edit Plate:", "Edit Vehicle", JOptionPane.PLAIN_MESSAGE, null, null, currentPlate);
         if (newPlate == null) return;
         
-        String newType = (String) JOptionPane.showInputDialog(this, "Edit Type:", "Edit Vehicle", JOptionPane.PLAIN_MESSAGE, null, null, currentType);
-        if (newType == null) return;
+        String[] types = {"Bus", "MiniBus", "Van", "Car"};
+        String newType = (String) JOptionPane.showInputDialog(
+                    this, 
+                    "Edit Type:", 
+                    "Edit Vehicle", 
+                    JOptionPane.QUESTION_MESSAGE, 
+                    null, 
+                    types,          
+                    currentType     
+                 );
 
         String newSeatsStr = (String) JOptionPane.showInputDialog(this, "Edit Seats:", "Edit Vehicle", JOptionPane.PLAIN_MESSAGE, null, null, String.valueOf(currentSeats));
         if (newSeatsStr == null) return;
         
-        String newStatus = (String) JOptionPane.showInputDialog(this, "Edit Status:", "Edit Vehicle", JOptionPane.PLAIN_MESSAGE, null, null, currentStatus);
-        if (newStatus == null) return;
+        String[] statuses = {"Available", "In use", "Currently being repaired"};
+        String newStatus = (String) JOptionPane.showInputDialog(
+            this, 
+            "Edit Status:", 
+            "Edit Vehicle", 
+            JOptionPane.QUESTION_MESSAGE, 
+            null, 
+            statuses,        
+            currentStatus    
+        );
         
         String newKmStr = (String) JOptionPane.showInputDialog(this, "Edit KM:", "Edit Vehicle", JOptionPane.PLAIN_MESSAGE, null, null, String.valueOf(currentKm));
         if (newKmStr == null) return;
         
-        String sql = "UPDATE vehicles SET ve_brand=?, ve_model=?, ve_license_plate=?, ve_type=?, ve_seats=?, ve_status=?, ve_km=? WHERE ve_id=?";
+        Map<String, Integer> branches = getBranches();
+        String[] branchOptions = branches.keySet().toArray(new String[0]);
+        String defaultBranch = branchOptions[0];
+        for (String option : branchOptions) {
+            if (option.contains(currentBranchCity)) {
+                defaultBranch = option;
+                break;
+            }
+        }
+
+            String selectedBranch = (String) JOptionPane.showInputDialog(
+                    this,
+                    "Edit Branch:",
+                    "Edit Vehicle",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    branchOptions,
+                    defaultBranch
+                );
+            if (selectedBranch == null) return;
+
+            int newBranchCode = branches.get(selectedBranch);
         
+        String sql = "UPDATE vehicles SET ve_brand=?, ve_model=?, ve_license_plate=?, ve_type=?, ve_seats=?, ve_status=?, ve_km=?, ve_br_code=? WHERE ve_id=?";        
         try (Connection conn = DBConnection.connect();
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
 
@@ -230,7 +323,8 @@ public class VehicleFrame extends JFrame {
             pstmt.setInt(5, Integer.parseInt(newSeatsStr));
             pstmt.setString(6, newStatus);
             pstmt.setInt(7, Integer.parseInt(newKmStr));
-            pstmt.setInt(8, id); // Το WHERE ve_id = ? μπαίνει στο τέλος
+            pstmt.setInt(8, newBranchCode);  
+            pstmt.setInt(9, id);    
 
             int rowsAffected = pstmt.executeUpdate();
             
